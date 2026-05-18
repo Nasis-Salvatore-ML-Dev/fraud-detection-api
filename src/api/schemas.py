@@ -136,8 +136,6 @@ class DriftReportResponse(BaseModel):
 
     computed_at: str
     n_recent_predictions: int
-    overall_status: str = Field(
-        description="One of: stable, monitor, action_required"
-    )
+    overall_status: str = Field(description="One of: stable, monitor, action_required")
     features: list[dict]
     recommendation: str

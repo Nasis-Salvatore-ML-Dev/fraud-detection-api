@@ -37,13 +37,13 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-REPO_ROOT  = Path(__file__).resolve().parents[1]
-MODEL_PKL  = REPO_ROOT / "models" / "xgboost_fraud_v1.pkl"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+MODEL_PKL = REPO_ROOT / "models" / "xgboost_fraud_v1.pkl"
 MODEL_ONNX = REPO_ROOT / "models" / "xgboost_fraud_v1.onnx"
 
-BENCHMARK_RUNS   = 1000
+BENCHMARK_RUNS = 1000
 EQUIVALENCE_RUNS = 5
-REL_TOL          = 0.001  # 0.1% relative difference
+REL_TOL = 0.001  # 0.1% relative difference
 
 
 # ---------------------------------------------------------------------------
@@ -74,20 +74,21 @@ def main() -> None:
         from skl2onnx.common.data_types import FloatTensorType
     except ImportError as exc:
         log.error(
-            "Missing dependency: %s\n"
-            "  Install with:  pip install skl2onnx onnx onnxruntime",
+            "Missing dependency: %s\n" "  Install with:  pip install skl2onnx onnx onnxruntime",
             exc,
         )
         sys.exit(1)
 
     # ── 2. Load model bundle ──────────────────────────────────────────────
     log.info("Loading model bundle from %s", MODEL_PKL)
-    bundle    = joblib.load(MODEL_PKL)
-    model     = bundle["model"]
+    bundle = joblib.load(MODEL_PKL)
+    model = bundle["model"]
     n_features = len(bundle["feature_names"])
     log.info(
         "Model loaded: version=%s  features=%d  threshold=%.4f",
-        bundle["version"], n_features, bundle["threshold"],
+        bundle["version"],
+        n_features,
+        bundle["threshold"],
     )
 
     # ── 3. Convert to ONNX ────────────────────────────────────────────────
@@ -106,16 +107,16 @@ def main() -> None:
 
     # ── 5. Numerical equivalence on 5 random inputs ───────────────────────
     log.info("Checking numerical equivalence on %d random inputs", EQUIVALENCE_RUNS)
-    rng     = np.random.default_rng(42)
+    rng = np.random.default_rng(42)
     X_check = rng.standard_normal((EQUIVALENCE_RUNS, n_features)).astype(np.float32)
 
-    proba_pkl  = model.predict_proba(X_check)[:, 1]
+    proba_pkl = model.predict_proba(X_check)[:, 1]
 
     sess = ort.InferenceSession(onnx_model.SerializeToString())
     proba_onnx = sess.run(None, {"X": X_check})[1][:, 1]
 
     rel_diff = np.abs(proba_pkl - proba_onnx) / (np.abs(proba_pkl) + 1e-10)
-    max_rel  = float(rel_diff.max())
+    max_rel = float(rel_diff.max())
 
     print()
     print("── Numerical Equivalence ────────────────────────────────────")
@@ -125,7 +126,8 @@ def main() -> None:
     if max_rel >= REL_TOL:
         log.error(
             "Equivalence check FAILED — max relative diff %.4f%% >= threshold %.1f%%",
-            max_rel * 100, REL_TOL * 100,
+            max_rel * 100,
+            REL_TOL * 100,
         )
         sys.exit(1)
     log.info("Equivalence OK — max relative diff %.4f%%", max_rel * 100)
@@ -134,18 +136,14 @@ def main() -> None:
     log.info("Benchmarking %d runs each format (single-sample)", BENCHMARK_RUNS)
     X_bench = rng.standard_normal((1, n_features)).astype(np.float32)
 
-    times_pkl  = _benchmark(
-        lambda X: model.predict_proba(X), BENCHMARK_RUNS, X_bench
-    )
-    times_onnx = _benchmark(
-        lambda X: sess.run(None, {"X": X}), BENCHMARK_RUNS, X_bench
-    )
+    times_pkl = _benchmark(lambda X: model.predict_proba(X), BENCHMARK_RUNS, X_bench)
+    times_onnx = _benchmark(lambda X: sess.run(None, {"X": X}), BENCHMARK_RUNS, X_bench)
 
-    p50_pkl  = _percentile(times_pkl,  50)
-    p99_pkl  = _percentile(times_pkl,  99)
+    p50_pkl = _percentile(times_pkl, 50)
+    p99_pkl = _percentile(times_pkl, 99)
     p50_onnx = _percentile(times_onnx, 50)
     p99_onnx = _percentile(times_onnx, 99)
-    speedup  = p50_pkl / p50_onnx if p50_onnx > 0 else float("inf")
+    speedup = p50_pkl / p50_onnx if p50_onnx > 0 else float("inf")
 
     print()
     print("── Benchmark Results ────────────────────────────────────────")

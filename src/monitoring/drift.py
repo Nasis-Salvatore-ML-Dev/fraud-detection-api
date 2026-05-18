@@ -110,14 +110,16 @@ class DriftMonitor:
             status = _psi_status(psi)
             statuses.append(status)
 
-            feature_reports.append({
-                "feature": feat,
-                "psi": round(psi, 6),
-                "status": status,
-                "n_samples": len(values),
-                "baseline_mean": round(baseline["mean"], 4),
-                "baseline_std": round(baseline["std"], 4),
-            })
+            feature_reports.append(
+                {
+                    "feature": feat,
+                    "psi": round(psi, 6),
+                    "status": status,
+                    "n_samples": len(values),
+                    "baseline_mean": round(baseline["mean"], 4),
+                    "baseline_std": round(baseline["std"], 4),
+                }
+            )
 
         overall_status = _worst_status(statuses) if statuses else _STABLE
 
@@ -148,11 +150,7 @@ class DriftMonitor:
                 for f in report.get("features", [])
             ]
             if metric_data:
-                cw.put_metric_data(
-                    Namespace="FraudDetection", MetricData=metric_data
-                )
-                log.info(
-                    "PSI metrics published to CloudWatch (%d features)", len(metric_data)
-                )
+                cw.put_metric_data(Namespace="FraudDetection", MetricData=metric_data)
+                log.info("PSI metrics published to CloudWatch (%d features)", len(metric_data))
         except Exception as exc:
             log.warning("CloudWatch publish failed (non-fatal): %s", exc)

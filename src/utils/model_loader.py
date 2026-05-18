@@ -50,9 +50,7 @@ def load_model_bundle() -> ModelBundle:
             "Set the MODEL_PATH environment variable to the correct path."
         )
     except Exception as exc:
-        raise RuntimeError(
-            f"Failed to deserialize model bundle from {model_path}: {exc}"
-        ) from exc
+        raise RuntimeError(f"Failed to deserialize model bundle from {model_path}: {exc}") from exc
 
     missing = _REQUIRED_KEYS - set(bundle.keys())
     if missing:

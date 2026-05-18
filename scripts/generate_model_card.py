@@ -34,16 +34,16 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-REPO_ROOT        = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[1]
 BIAS_REPORT_PATH = REPO_ROOT / "data" / "reports" / "bias_report.json"
-MODEL_CARD_PATH  = REPO_ROOT / "model_card.json"
+MODEL_CARD_PATH = REPO_ROOT / "model_card.json"
 
 # ---------------------------------------------------------------------------
 # Hardcoded Phase-1 baseline metrics (updated on each retrain)
 # ---------------------------------------------------------------------------
-_PHASE1_AUPRC  = 0.7942
+_PHASE1_AUPRC = 0.7942
 _PHASE1_RECALL = 0.7600
-_PHASE1_FPR    = 0.000141
+_PHASE1_FPR = 0.000141
 
 
 # ---------------------------------------------------------------------------
@@ -59,12 +59,13 @@ def main() -> None:
         try:
             with open(BIAS_REPORT_PATH) as f:
                 bias_report = json.load(f)
-            bias_segments      = bias_report.get("bias_segments", [])
-            bias_computed_at   = bias_report.get("computed_at")
+            bias_segments = bias_report.get("bias_segments", [])
+            bias_computed_at = bias_report.get("computed_at")
             bias_recommendation = bias_report.get("recommendation")
             log.info(
                 "Bias report loaded — %d segment(s), computed_at=%s",
-                len(bias_segments), bias_computed_at,
+                len(bias_segments),
+                bias_computed_at,
             )
         except Exception as exc:
             log.warning("Could not load bias report (non-fatal): %s", exc)
@@ -81,11 +82,11 @@ def main() -> None:
 
     card: dict = {
         "model_details": {
-            "name":        "fraud-detection-xgboost",
-            "version":     "xgboost_fraud_v1",
-            "type":        "XGBClassifier",
-            "task":        "binary_classification",
-            "framework":   "XGBoost 2.x + scikit-learn wrapper",
+            "name": "fraud-detection-xgboost",
+            "version": "xgboost_fraud_v1",
+            "type": "XGBClassifier",
+            "task": "binary_classification",
+            "framework": "XGBoost 2.x + scikit-learn wrapper",
             "description": (
                 "Gradient-boosted decision tree classifier that scores individual "
                 "credit-card transactions as fraudulent or legitimate. "
@@ -117,28 +118,28 @@ def main() -> None:
         },
         "metrics": {
             "performance_measures": ["AUPRC", "Recall", "False Positive Rate"],
-            "decision_threshold":   0.5,
+            "decision_threshold": 0.5,
             "results": {
-                "auprc":  _PHASE1_AUPRC,
+                "auprc": _PHASE1_AUPRC,
                 "recall": _PHASE1_RECALL,
-                "fpr":    _PHASE1_FPR,
-                "note":   "Phase-1 baseline on 20% temporal hold-out. Updated on each retrain.",
+                "fpr": _PHASE1_FPR,
+                "note": "Phase-1 baseline on 20% temporal hold-out. Updated on each retrain.",
             },
             "bias_results": {
-                "computed_at":   bias_computed_at,
-                "segments":      bias_segments,
+                "computed_at": bias_computed_at,
+                "segments": bias_segments,
                 "recommendation": bias_recommendation,
             },
         },
         "evaluation_data": {
-            "dataset":        "Kaggle Credit Card Fraud Detection",
-            "source":         "https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud",
+            "dataset": "Kaggle Credit Card Fraud Detection",
+            "source": "https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud",
             "total_transactions": 284807,
-            "fraud_cases":    492,
+            "fraud_cases": 492,
             "fraud_rate_pct": round(492 / 284807 * 100, 4),
-            "split":          "Chronological 80/20 — first 80% train, last 20% test",
-            "time_coverage":  "2 days of European transactions (Sept 2013)",
-            "preprocessing":  (
+            "split": "Chronological 80/20 — first 80% train, last 20% test",
+            "time_coverage": "2 days of European transactions (Sept 2013)",
+            "preprocessing": (
                 "No scaling applied to V1–V28 (already PCA-transformed). "
                 "Amount log-transformed (log1p) and z-scored using training-set statistics. "
                 "Hour of day derived from elapsed seconds modulo 86400."
@@ -165,15 +166,15 @@ def main() -> None:
             "(Amount, amount_log, amount_zscore, hour_of_day), not the 28 PCA components.",
         ],
         "mlops": {
-            "platform":         "AWS Lambda (container image) + API Gateway",
-            "audit_log":        "DynamoDB table  fraud-audit-log  (permanent TTL)",
-            "override_queue":   "DynamoDB table  fraud-override-queue  (30-day TTL)",
-            "drift_detection":  "PSI on Amount, amount_log, amount_zscore, hour_of_day; "
-                                "alert thresholds stable < 0.10 < monitor < 0.20 < action_required",
-            "bias_testing":     "Per-segment AUPRC and FPR parity; gates CD pipeline via "
-                                "scripts/run_bias_test.py (exit 1 on failure)",
-            "ci_cd":            "GitHub Actions — CI on PR, CD on merge to main",
-            "model_registry":   "s3://fraud-detection-models/xgboost_fraud_v1.pkl",
+            "platform": "AWS Lambda (container image) + API Gateway",
+            "audit_log": "DynamoDB table  fraud-audit-log  (permanent TTL)",
+            "override_queue": "DynamoDB table  fraud-override-queue  (30-day TTL)",
+            "drift_detection": "PSI on Amount, amount_log, amount_zscore, hour_of_day; "
+            "alert thresholds stable < 0.10 < monitor < 0.20 < action_required",
+            "bias_testing": "Per-segment AUPRC and FPR parity; gates CD pipeline via "
+            "scripts/run_bias_test.py (exit 1 on failure)",
+            "ci_cd": "GitHub Actions — CI on PR, CD on merge to main",
+            "model_registry": "s3://fraud-detection-models/xgboost_fraud_v1.pkl",
         },
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -189,7 +190,7 @@ def main() -> None:
         print("── Flagged Bias Segments ────────────────────────────────────")
         for seg in flagged:
             auprc_str = f"{seg['auprc']:.4f}" if seg.get("auprc") is not None else "N/A"
-            fpr_str   = f"{seg['fpr']:.6f}"   if seg.get("fpr")  is not None else "N/A"
+            fpr_str = f"{seg['fpr']:.6f}" if seg.get("fpr") is not None else "N/A"
             print(
                 f"  ⚠  {seg['segment']:<14}  "
                 f"AUPRC={auprc_str}  FPR={fpr_str}  "

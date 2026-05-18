@@ -71,9 +71,7 @@ class AuditLogger:
         }
         try:
             loop = asyncio.get_event_loop()
-            await loop.run_in_executor(
-                None, lambda: self._audit_table.put_item(Item=item)
-            )
+            await loop.run_in_executor(None, lambda: self._audit_table.put_item(Item=item))
         except Exception as exc:
             log.error("AuditLogger.write failed (silent): %s", exc)
 
@@ -83,9 +81,7 @@ class AuditLogger:
             loop = asyncio.get_event_loop()
             response = await loop.run_in_executor(
                 None,
-                lambda: self._audit_table.get_item(
-                    Key={"prediction_id": prediction_id}
-                ),
+                lambda: self._audit_table.get_item(Key={"prediction_id": prediction_id}),
             )
             item = response.get("Item")
             if item is None:
@@ -103,9 +99,7 @@ class AuditLogger:
         """Scan the audit table and return up to limit records for drift computation."""
         try:
             loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(
-                None, lambda: self._audit_table.scan(Limit=limit)
-            )
+            response = await loop.run_in_executor(None, lambda: self._audit_table.scan(Limit=limit))
             records: list[dict] = []
             for item in response.get("Items", []):
                 record = _from_dynamo(item)
@@ -135,9 +129,7 @@ class AuditLogger:
         }
         try:
             loop = asyncio.get_event_loop()
-            await loop.run_in_executor(
-                None, lambda: self._override_table.put_item(Item=item)
-            )
+            await loop.run_in_executor(None, lambda: self._override_table.put_item(Item=item))
             log.info("Override queued for prediction_id=%s", prediction_id)
         except Exception as exc:
             log.error("AuditLogger.flag_override failed (silent): %s", exc)

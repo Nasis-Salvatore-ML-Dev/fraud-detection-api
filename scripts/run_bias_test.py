@@ -33,7 +33,7 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-REPO_ROOT       = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[1]
 VALIDATION_PATH = REPO_ROOT / "data" / "validation" / "validation_set.csv"
 
 # AUPRC parity ratio — must match _FLAG_RATIO in bias_tester.py
@@ -74,7 +74,7 @@ def main() -> None:
 
     log.info("Loading model bundle")
     try:
-        bundle = load_model_bundle()
+        load_model_bundle()
     except Exception as exc:
         log.error("Failed to load model bundle: %s", exc)
         sys.exit(1)
@@ -83,19 +83,21 @@ def main() -> None:
     from src.monitoring.bias_tester import BiasTestSuite
 
     log.info("Running bias test suite")
-    suite  = BiasTestSuite()
+    suite = BiasTestSuite()
     report = suite.run(validation_df=validation_df)
 
-    overall_auprc       = report["overall_auprc"]
-    overall_fpr         = report["overall_fpr"]
+    overall_auprc = report["overall_auprc"]
+    overall_fpr = report["overall_fpr"]
     fpr_parity_threshold = report["fpr_parity_threshold"]
-    auprc_floor         = _AUPRC_FLAG_RATIO * overall_auprc
+    auprc_floor = _AUPRC_FLAG_RATIO * overall_auprc
 
     # ── 5. Print segment table ────────────────────────────────────────────
     print()
     print("── Bias Test Results ─────────────────────────────────────────────────────────")
-    print(f"  overall_auprc={overall_auprc:.4f}   overall_fpr={overall_fpr:.6f}   "
-          f"fpr_parity_threshold={fpr_parity_threshold:.6f}")
+    print(
+        f"  overall_auprc={overall_auprc:.4f}   overall_fpr={overall_fpr:.6f}   "
+        f"fpr_parity_threshold={fpr_parity_threshold:.6f}"
+    )
     print()
 
     col_w = [16, 8, 10, 15, 13]
@@ -110,14 +112,12 @@ def main() -> None:
     any_flagged = False
     for seg in report["bias_segments"]:
         auprc_val = seg.get("auprc")
-        fpr_val   = seg.get("fpr")
+        fpr_val = seg.get("fpr")
 
-        auprc_str    = f"{auprc_val:.4f}" if auprc_val is not None else "N/A"
-        fpr_str      = f"{fpr_val:.6f}"   if fpr_val  is not None else "N/A"
-        auprc_flagged = (
-            auprc_val is not None and auprc_val < auprc_floor
-        )
-        fpr_flagged   = seg.get("fpr_flagged", False)
+        auprc_str = f"{auprc_val:.4f}" if auprc_val is not None else "N/A"
+        fpr_str = f"{fpr_val:.6f}" if fpr_val is not None else "N/A"
+        auprc_flagged = auprc_val is not None and auprc_val < auprc_floor
+        fpr_flagged = seg.get("fpr_flagged", False)
 
         row_flagged = auprc_flagged or fpr_flagged
         if row_flagged:
@@ -131,7 +131,7 @@ def main() -> None:
         )
 
     print()
-    print(f"  (* = flagged segment)")
+    print("  (* = flagged segment)")
 
     # ── 6. Gate ───────────────────────────────────────────────────────────
     print()

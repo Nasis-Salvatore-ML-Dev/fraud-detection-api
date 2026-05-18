@@ -23,6 +23,7 @@ _MODEL_PATH = _REPO_ROOT / "models" / "xgboost_fraud_v1.pkl"
 _AMOUNT_MEAN: float = 90.8249
 _AMOUNT_STD: float = 250.5032
 
+
 # ---------------------------------------------------------------------------
 # Load model feature order once at import time
 # ---------------------------------------------------------------------------
@@ -36,9 +37,7 @@ def _load_model_feature_names(model_path: Path) -> list[str]:
 try:
     MODEL_FEATURE_NAMES: list[str] = _load_model_feature_names(_MODEL_PATH)
 except Exception as exc:
-    raise RuntimeError(
-        f"Failed to load model bundle from {_MODEL_PATH}: {exc}"
-    ) from exc
+    raise RuntimeError(f"Failed to load model bundle from {_MODEL_PATH}: {exc}") from exc
 
 # Expected feature order, derived from the loaded model (authoritative source).
 # Shown here for documentation; do NOT hard-code a separate list to compare against.

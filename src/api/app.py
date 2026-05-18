@@ -154,10 +154,10 @@ async def predict(payload: PredictionRequest, req: Request) -> PredictionRespons
     request_ip = req.client.host if req.client else "unknown"
 
     input_features = {
-        "Amount":        payload.amount,
-        "amount_log":    float(features["amount_log"].iloc[0]),
+        "Amount": payload.amount,
+        "amount_log": float(features["amount_log"].iloc[0]),
         "amount_zscore": float(features["amount_zscore"].iloc[0]),
-        "hour_of_day":   float(features["hour_of_day"].iloc[0]),
+        "hour_of_day": float(features["hour_of_day"].iloc[0]),
     }
 
     await _audit.write(
@@ -201,9 +201,7 @@ async def explain(prediction_id: str) -> dict:
 
     record = await _audit.fetch(prediction_id)
     if record is None:
-        raise HTTPException(
-            status_code=404, detail=f"Prediction {prediction_id!r} not found"
-        )
+        raise HTTPException(status_code=404, detail=f"Prediction {prediction_id!r} not found")
     return record
 
 

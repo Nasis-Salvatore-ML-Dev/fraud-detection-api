@@ -30,7 +30,7 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-REPO_ROOT     = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[1]
 BASELINE_PATH = REPO_ROOT / "data" / "baselines" / "training_baseline.json"
 
 
@@ -42,8 +42,7 @@ def main() -> None:
     log.info("Checking baseline at %s", BASELINE_PATH)
     if not BASELINE_PATH.exists():
         log.error(
-            "Baseline file not found: %s\n"
-            "  Run  python scripts/train.py  to generate it.",
+            "Baseline file not found: %s\n" "  Run  python scripts/train.py  to generate it.",
             BASELINE_PATH,
         )
         sys.exit(1)

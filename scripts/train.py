@@ -14,9 +14,9 @@ import joblib
 import numpy as np
 import pandas as pd
 from sklearn.metrics import (
+    average_precision_score,
     classification_report,
     confusion_matrix,
-    average_precision_score,
 )
 from xgboost import XGBClassifier
 
@@ -120,10 +120,12 @@ def main() -> None:
     log.info("Engineering features")
     df = engineer_features(df)
 
-    feature_cols = (
-        [c for c in df.columns if c.startswith("V")]
-        + ["Amount", "amount_log", "amount_zscore", "hour_of_day"]
-    )
+    feature_cols = [c for c in df.columns if c.startswith("V")] + [
+        "Amount",
+        "amount_log",
+        "amount_zscore",
+        "hour_of_day",
+    ]
     X = df[feature_cols]
     y = df["Class"].astype(int)
 
@@ -134,7 +136,10 @@ def main() -> None:
 
     log.info(
         "Train size: %d  (fraud: %d)  |  Test size: %d  (fraud: %d)",
-        len(y_train), y_train.sum(), len(y_test), y_test.sum(),
+        len(y_train),
+        y_train.sum(),
+        len(y_test),
+        y_test.sum(),
     )
 
     # ── 4. Class imbalance weight ─────────────────────────────────────────
@@ -204,7 +209,9 @@ def main() -> None:
         print(f"  FN={optimal_metrics['fn']}  TN={optimal_metrics['tn']}")
         log.info(
             "Optimal threshold=%.2f  Recall=%.4f  FPR=%.6f",
-            optimal_threshold, optimal_metrics["recall"], optimal_metrics["fpr"],
+            optimal_threshold,
+            optimal_metrics["recall"],
+            optimal_metrics["fpr"],
         )
     else:
         log.warning(
@@ -231,7 +238,9 @@ def main() -> None:
     joblib.dump(bg, SHAP_OUT)
     log.info(
         "SHAP background saved → %s  (shape: %s, fraud rows: %d)",
-        SHAP_OUT, bg.shape, n_bg_fraud,
+        SHAP_OUT,
+        bg.shape,
+        n_bg_fraud,
     )
 
     # ── 9. PSI baseline ───────────────────────────────────────────────────
@@ -258,8 +267,10 @@ def main() -> None:
         }
         log.info(
             "  %s: %d bins, mean=%.4f, std=%.4f",
-            feature, len(bin_edges) - 1,
-            psi_baseline[feature]["mean"], psi_baseline[feature]["std"],
+            feature,
+            len(bin_edges) - 1,
+            psi_baseline[feature]["mean"],
+            psi_baseline[feature]["std"],
         )
 
     with open(BASELINE_OUT, "w") as f:
