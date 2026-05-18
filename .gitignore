@@ -1,0 +1,63 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Data — never commit raw data or large files
+data/training/*.csv
+data/validation/*.csv
+data/baselines/*.pkl
+data/baselines/*.json
+
+# Models — never commit model artifacts to git
+models/
+*.pkl
+*.onnx
+*.pt
+
+# Environment variables
+.env
+.env.*
+
+
+# IDE
+.vscode/settings.json
+.idea/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# AWS
+.aws/
+
+# Ruff cache
+.ruff_cache/
+
+# Coverage
+.coverage
+htmlcov/
+coverage.xml
+
+# pytest
+.pytest_cache/
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+
+# docs — personal reference only
+/docs/runbook_old
+/docs/useful_commands.md
