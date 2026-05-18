@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main, staging]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Lint
+        run: ruff check src/ tests/ scripts/
+
+      - name: Format check
+        run: ruff format --check src/ tests/ scripts/
+
+      - name: Type check
+        run: mypy src/ --ignore-missing-imports
+        continue-on-error: true
+
+      - name: Unit tests
+        run: |
+          pytest tests/unit/ \
+            --cov=src \
+            --cov-report=term-missing \
+            --cov-fail-under=0 \
+            -v
+
+      - name: Integration tests
+        run: |
+          pytest tests/integration/ \
+            -v \
+            --timeout=30
+        env:
+          MODEL_PATH: models/xgboost_fraud_v1.pkl
+          AWS_DEFAULT_REGION: eu-central-1
+
+      - name: Docker build smoke test
+        run: |
+          docker build -t fraud-detection-api:ci-${{ github.sha }} .
+          docker run --rm \
+            -e MODEL_PATH=models/xgboost_fraud_v1.pkl \
+            -e AWS_DEFAULT_REGION=eu-central-1 \
+            --entrypoint python \
+            fraud-detection-api:ci-${{ github.sha }} \
+            -c "import sys; sys.path.insert(0, '/var/task'); \
+                from src.api.app import app; print('Import OK')"
+
+      - name: Upload coverage report
+        if: matrix.python-version == '3.11'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: .coverage

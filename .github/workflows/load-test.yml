@@ -1,0 +1,100 @@
+name: Load Test
+
+on:
+  push:
+    branches: [staging]
+
+jobs:
+  load-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Locust
+        run: pip install locust
+
+      - name: Warm up staging endpoint
+        run: |
+          for i in 1 2 3; do
+            echo "Warm-up request $i / 3..."
+            curl -sf "${{ secrets.STAGING_API_URL }}/health"
+            sleep 2
+          done
+          echo "Warm-up complete."
+
+      - name: Run Locust load test
+        run: |
+          locust \
+            -f tests/load/locustfile.py \
+            --headless \
+            --users 50 \
+            --spawn-rate 5 \
+            --run-time 60s \
+            --host "${{ secrets.STAGING_API_URL }}" \
+            --html tests/load/report.html \
+            --csv tests/load/results \
+            --exit-code-on-error 1
+
+      - name: Assert latency thresholds
+        run: |
+          python3 - <<'EOF'
+          import csv, sys
+
+          stats_file = "tests/load/results_stats.csv"
+
+          predict_p99  = None
+          predict_errors = None
+          predict_total  = None
+          aggregated_rps = None
+
+          with open(stats_file) as f:
+              for row in csv.DictReader(f):
+                  name = row.get("Name", "").strip()
+                  if name == "/predict":
+                      predict_p99    = float(row["99%"])
+                      predict_errors = float(row["Failure Count"])
+                      predict_total  = float(row["Request Count"])
+                  if name == "Aggregated":
+                      aggregated_rps = float(row["Requests/s"])
+
+          if predict_p99 is None:
+              print("ERROR: /predict row not found in results_stats.csv", file=sys.stderr)
+              sys.exit(1)
+
+          error_rate = (predict_errors / predict_total * 100) if predict_total else 0.0
+
+          print(f"  /predict p99 latency : {predict_p99:.0f} ms  (threshold: 2000 ms)")
+          print(f"  /predict error rate  : {error_rate:.2f}%  (threshold: 1%)")
+          if aggregated_rps is not None:
+              print(f"  Aggregated RPS       : {aggregated_rps:.1f}")
+
+          failed = False
+          if predict_p99 >= 2000:
+              print(f"FAIL: p99 {predict_p99:.0f} ms >= 2000 ms", file=sys.stderr)
+              failed = True
+          if error_rate >= 1.0:
+              print(f"FAIL: error rate {error_rate:.2f}% >= 1%", file=sys.stderr)
+              failed = True
+
+          if failed:
+              sys.exit(1)
+
+          print("Load test PASSED. All thresholds met.")
+          EOF
+
+      - name: Upload load test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fraud-load-test-report
+          path: |
+            tests/load/report.html
+            tests/load/results_stats.csv
+            tests/load/results_failures.csv

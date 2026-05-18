@@ -1,0 +1,176 @@
+name: CD
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: fraud-production-deploy
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: eu-central-1
+  ECR_REPOSITORY: fraud-detection-api
+  LAMBDA_FUNCTION: fraud-detection-api
+  LAMBDA_FUNCTION_STAGING: fraud-detection-api-staging
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-central-1
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image to ECR
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          IMAGE_URI="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+
+          docker build \
+            --cache-from "$ECR_REGISTRY/$ECR_REPOSITORY:latest" \
+            --build-arg GIT_SHA="$IMAGE_TAG" \
+            -t "$IMAGE_URI" \
+            -t "$ECR_REGISTRY/$ECR_REPOSITORY:latest" \
+            .
+
+          docker push "$IMAGE_URI"
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
+
+          echo "image_uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy to staging Lambda
+        env:
+          IMAGE_URI: ${{ steps.build-image.outputs.image_uri }}
+        run: |
+          aws lambda update-function-code \
+            --function-name "$LAMBDA_FUNCTION_STAGING" \
+            --image-uri "$IMAGE_URI" \
+            --region "$AWS_REGION"
+
+          aws lambda wait function-updated \
+            --function-name "$LAMBDA_FUNCTION_STAGING" \
+            --region "$AWS_REGION"
+
+      - name: Smoke test staging
+        run: |
+          for i in $(seq 1 5); do
+            echo "Attempt $i / 5..."
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+              "${{ secrets.STAGING_API_URL }}/health")
+            if [ "$STATUS" = "200" ]; then
+              echo "Health check passed (HTTP $STATUS)"
+              break
+            fi
+            echo "Health check returned HTTP $STATUS — waiting 10s"
+            if [ "$i" = "5" ]; then
+              echo "Staging health check failed after 5 attempts."
+              exit 1
+            fi
+            sleep 10
+          done
+
+          RESPONSE=$(curl -s -X POST \
+            "${{ secrets.STAGING_API_URL }}/predict" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "time": 1000.0, "amount": 149.62,
+              "v1": -1.3598, "v2": -0.0728, "v3":  2.5363,
+              "v4":  1.3782, "v5": -0.3383, "v6":  0.4624,
+              "v7":  0.2396, "v8":  0.0987, "v9":  0.3638,
+              "v10": 0.0908, "v11": -0.5516, "v12": -0.6178,
+              "v13": -0.9914, "v14": -0.3112, "v15":  1.4682,
+              "v16": -0.4704, "v17":  0.2076, "v18":  0.0258,
+              "v19":  0.4036, "v20":  0.2514, "v21": -0.0183,
+              "v22":  0.2779, "v23": -0.1105, "v24":  0.0669,
+              "v25":  0.1285, "v26": -0.1891, "v27":  0.1336,
+              "v28": -0.0210
+            }')
+
+          echo "Predict response: $RESPONSE"
+
+          echo "$RESPONSE" | python3 -c "
+          import sys, json
+          r = json.load(sys.stdin)
+          assert 'prediction_id' in r,    'missing prediction_id'
+          assert 'fraud_probability' in r, 'missing fraud_probability'
+          assert r['fraud_probability'] >= 0, 'fraud_probability must be >= 0'
+          print(f'fraud_probability={r[\"fraud_probability\"]}  is_fraud={r[\"is_fraud\"]}')
+          "
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run bias test
+        run: PYTHONPATH=. python scripts/run_bias_test.py
+        env:
+          MODEL_PATH: models/xgboost_fraud_v1.pkl
+
+      - name: Generate model card
+        run: python scripts/generate_model_card.py
+        env:
+          MODEL_PATH: models/xgboost_fraud_v1.pkl
+
+      - name: Deploy to production Lambda
+        env:
+          IMAGE_URI: ${{ steps.build-image.outputs.image_uri }}
+        run: |
+          aws lambda update-function-code \
+            --function-name "$LAMBDA_FUNCTION" \
+            --image-uri "$IMAGE_URI" \
+            --region "$AWS_REGION"
+
+          aws lambda wait function-updated \
+            --function-name "$LAMBDA_FUNCTION" \
+            --region "$AWS_REGION"
+
+      - name: Smoke test production
+        run: |
+          for i in $(seq 1 5); do
+            echo "Attempt $i / 5..."
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+              "${{ secrets.PROD_API_URL }}/health")
+            if [ "$STATUS" = "200" ]; then
+              echo "Health check passed (HTTP $STATUS)"
+              break
+            fi
+            echo "Health check returned HTTP $STATUS — waiting 10s"
+            if [ "$i" = "5" ]; then
+              echo "Production health check failed after 5 attempts."
+              exit 1
+            fi
+            sleep 10
+          done
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          aws cloudwatch put-metric-data \
+            --namespace FraudDetection \
+            --metric-name DeploymentFailure \
+            --value 1 \
+            --unit Count \
+            --region "$AWS_REGION"
