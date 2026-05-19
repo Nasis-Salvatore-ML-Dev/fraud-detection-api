@@ -18,7 +18,7 @@ COPY --from=builder /build/packages ${LAMBDA_TASK_ROOT}
 
 # Application source
 COPY src/    ${LAMBDA_TASK_ROOT}/src/
-COPY models/ ${LAMBDA_TASK_ROOT}/models/
+RUN mkdir -p ${LAMBDA_TASK_ROOT}/models/
 
 # Baseline data required at startup by DriftMonitor
 COPY data/baselines/ ${LAMBDA_TASK_ROOT}/data/baselines/
@@ -30,7 +30,7 @@ COPY model_card.json ${LAMBDA_TASK_ROOT}/
 RUN mkdir -p ${LAMBDA_TASK_ROOT}/data/reports
 
 # Runtime configuration
-ENV MODEL_PATH=models/xgboost_fraud_v1.pkl
+ENV MODEL_PATH=/tmp/xgboost_fraud_v1.pkl
 ENV MODEL_VERSION=xgboost_fraud_v1
 ENV AWS_DEFAULT_REGION=eu-central-1
 ENV PYTHONUNBUFFERED=1

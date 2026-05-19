@@ -61,3 +61,5 @@ coverage.xml
 # docs — personal reference only
 /docs/runbook_old
 /docs/useful_commands.md/docs/runbook_old.md
+models/*.pkl
+models/*.onnx

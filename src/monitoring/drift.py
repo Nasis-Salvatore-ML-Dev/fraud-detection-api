@@ -15,7 +15,7 @@ import numpy as np
 log = logging.getLogger(__name__)
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_BASELINE_PATH = _REPO_ROOT / "data" / "baselines" / "training_baseline.json"
+_DEFAULT_BASELINE_PATH = _REPO_ROOT / "data" / "baselines" / "training_baseline.json"
 
 _PSI_FEATURES = ["Amount", "amount_log", "amount_zscore", "hour_of_day"]
 
@@ -54,7 +54,10 @@ class DriftMonitor:
     """Compute PSI-based drift reports by comparing recent predictions to the training distribution."""
 
     def __init__(self) -> None:
-        with open(_BASELINE_PATH) as f:
+        env_path = os.environ.get("BASELINE_PATH")
+        baseline_path = Path(env_path) if env_path else _DEFAULT_BASELINE_PATH
+        log.info("DriftMonitor loading baseline from %s", baseline_path)
+        with open(baseline_path) as f:
             self._baseline: dict = json.load(f)
         log.info(
             "DriftMonitor initialised  baseline_features=%s",
