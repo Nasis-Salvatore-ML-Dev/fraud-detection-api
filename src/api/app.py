@@ -140,7 +140,7 @@ async def predict(payload: PredictionRequest, req: Request) -> PredictionRespons
 
     t0 = time.perf_counter()
 
-    features = build_feature_dataframe(payload)
+    features = build_feature_dataframe(payload, _bundle.feature_names)
     proba = _bundle.model.predict_proba(features)
     fraud_probability: float = float(proba[:, 1][0])
 

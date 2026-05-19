@@ -1,53 +1,23 @@
 """Transform a PredictionRequest into a model-ready DataFrame.
 
 Feature engineering mirrors scripts/train.py exactly. Column order is
-validated against the saved model bundle at module import time so
-mismatches surface immediately rather than silently corrupting predictions.
+validated against the feature_names passed in at request time.
 """
 
-from pathlib import Path
-
-import joblib
 import numpy as np
 import pandas as pd
 
 from src.api.schemas import PredictionRequest
-
-# ---------------------------------------------------------------------------
-# Paths
-# ---------------------------------------------------------------------------
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-_MODEL_PATH = _REPO_ROOT / "models" / "xgboost_fraud_v1.pkl"
 
 # Fixed training-set statistics for amount_zscore (must match train.py ddof=0)
 _AMOUNT_MEAN: float = 90.8249
 _AMOUNT_STD: float = 250.5032
 
 
-# ---------------------------------------------------------------------------
-# Load model feature order once at import time
-# ---------------------------------------------------------------------------
-def _load_model_feature_names(model_path: Path) -> list[str]:
-    """Return the feature_names list stored inside the model bundle."""
-    bundle = joblib.load(model_path)
-    names: list[str] = bundle["feature_names"]
-    return names
-
-
-try:
-    MODEL_FEATURE_NAMES: list[str] = _load_model_feature_names(_MODEL_PATH)
-except Exception as exc:
-    raise RuntimeError(f"Failed to load model bundle from {_MODEL_PATH}: {exc}") from exc
-
-# Expected feature order, derived from the loaded model (authoritative source).
-# Shown here for documentation; do NOT hard-code a separate list to compare against.
-_EXPECTED_N_FEATURES = len(MODEL_FEATURE_NAMES)
-
-
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
-def build_feature_dataframe(request: PredictionRequest) -> pd.DataFrame:
+def build_feature_dataframe(
+    request: PredictionRequest,
+    feature_names: list[str],
+) -> pd.DataFrame:
     """Convert a PredictionRequest into a single-row DataFrame for inference.
 
     Applies the same feature engineering as scripts/train.py:
@@ -58,8 +28,7 @@ def build_feature_dataframe(request: PredictionRequest) -> pd.DataFrame:
     Returns a DataFrame whose columns are in the exact order the model expects.
 
     Raises:
-        ValueError: If the constructed feature set does not match the model's
-                    expected feature names (number or order mismatch).
+        ValueError: If the constructed feature set does not match feature_names.
     """
     amount = request.amount
     time = request.time
@@ -102,21 +71,20 @@ def build_feature_dataframe(request: PredictionRequest) -> pd.DataFrame:
 
     # Reorder to match the model's expected feature sequence
     try:
-        ordered = {col: raw[col] for col in MODEL_FEATURE_NAMES}
+        ordered = {col: raw[col] for col in feature_names}
     except KeyError as missing:
         raise ValueError(
             f"Engineered features are missing column(s) expected by the model: {missing}. "
-            f"Model expects: {MODEL_FEATURE_NAMES}"
+            f"Model expects: {feature_names}"
         ) from missing
 
     df = pd.DataFrame([ordered])
 
-    # Validate column count and names exactly
-    if list(df.columns) != MODEL_FEATURE_NAMES:
+    if list(df.columns) != feature_names:
         raise ValueError(
             f"Feature mismatch after construction.\n"
             f"  Got:      {list(df.columns)}\n"
-            f"  Expected: {MODEL_FEATURE_NAMES}"
+            f"  Expected: {feature_names}"
         )
 
     return df
