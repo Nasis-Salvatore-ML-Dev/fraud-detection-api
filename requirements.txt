@@ -1,7 +1,7 @@
 fastapi==0.111.0
 mangum==0.17.0
 pydantic==2.7.1
-xgboost==2.1.0
+xgboost==2.0.3
 scikit-learn==1.7.2
 pandas==2.2.2
 numpy==1.26.3
@@ -12,3 +12,4 @@ onnx==1.16.0
 onnxruntime==1.16.3
 skl2onnx==1.17.0
 uvicorn==0.29.0
+scipy==1.11.4
