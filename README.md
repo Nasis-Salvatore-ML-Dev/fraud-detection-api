@@ -6,14 +6,18 @@ Real-time credit-card fraud scoring API — XGBoost on AWS Lambda with DynamoDB 
 
 ## Live endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/health` | Liveness check — returns model version and load status |
-| `POST` | `/predict` | Fraud probability, confidence score, and review flag |
-| `GET` | `/explain/{id}` | SHAP breakdown (architecture ready; disabled in Lambda runtime — see [Engineering decisions](#engineering-decisions)) |
-| `POST` | `/override` | Flag a prediction for human review; writes to override queue |
-| `GET` | `/drift` | PSI drift report across the 500 most recent predictions |
-| `GET` | `/metrics` | Per-segment bias report and FPR parity results |
+**Base URL (staging):** `https://4mhpswg272.execute-api.eu-central-1.amazonaws.com`
+
+> **Availability note:** This is a portfolio project deployed on AWS free tier. The staging endpoint is live as of May 2026. If you are reading this significantly later, the endpoint may have been taken down to avoid post-free-tier costs. To run locally, see [Local development](#local-development).
+
+| Method | Path            | Description                                                                                                           |
+| ------ | --------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/health`       | Liveness check — returns model version and load status                                                                |
+| `POST` | `/predict`      | Fraud probability, confidence score, and review flag                                                                  |
+| `GET`  | `/explain/{id}` | SHAP breakdown (architecture ready; disabled in Lambda runtime — see [Engineering decisions](#engineering-decisions)) |
+| `POST` | `/override`     | Flag a prediction for human review; writes to override queue                                                          |
+| `GET`  | `/drift`        | PSI drift report across the 500 most recent predictions                                                               |
+| `GET`  | `/metrics`      | Per-segment bias report and FPR parity results                                                                        |
 
 ---
 
@@ -22,7 +26,7 @@ Real-time credit-card fraud scoring API — XGBoost on AWS Lambda with DynamoDB 
 ### Predict
 
 ```bash
-curl -X POST https://{api-id}.execute-api.eu-central-1.amazonaws.com/predict \
+curl -X POST https://4mhpswg272.execute-api.eu-central-1.amazonaws.com/predict \
   -H "Content-Type: application/json" \
   -d '{
     "time": 0.0,
@@ -61,7 +65,7 @@ curl -X POST https://{api-id}.execute-api.eu-central-1.amazonaws.com/predict \
 ### Override a flagged prediction
 
 ```bash
-curl -X POST https://{api-id}.execute-api.eu-central-1.amazonaws.com/override \
+curl -X POST https://4mhpswg272.execute-api.eu-central-1.amazonaws.com/override \
   -H "Content-Type: application/json" \
   -d '{
     "prediction_id": "3f7a1c2e-84b0-4d9a-a3e1-0f52c8d6e291",
@@ -81,13 +85,15 @@ GitHub push
   └── CI (GitHub Actions)
         ├── ruff lint + format check
         ├── mypy type check
-        └── pytest unit tests
-              └── merge to main → CD
-                    ├── docker build + push to ECR
-                    ├── Lambda function update
-                    ├── smoke test (GET /health)
-                    ├── bias gate (run_bias_test.py → exit 1 on fail)
-                    └── generate_model_card.py → model_card.json
+        └── pytest unit + integration tests
+              └── merge to main → CD (concurrency: one deployment at a time, cancel-in-progress: false)
+                    ├── docker build + push to ECR (tagged git SHA + latest)
+                    ├── staging Lambda update
+                    ├── staging smoke test (GET /health + POST /predict → exit 1 on fail)
+                    ├── bias gate (run_bias_test.py → exit 1 if any segment flagged)
+                    ├── generate_model_card.py → model_card.json → S3
+                    ├── production Lambda update (only runs if all above pass)
+                    └── production smoke test (GET /health → exit 1 on fail)
 ```
 
 ### Runtime path
@@ -109,16 +115,17 @@ CloudWatch ← PSI metrics (FraudDetection/FraudPSI, per feature)
 
 ## Model
 
-| Metric | Value | Notes |
-|--------|-------|-------|
-| AUPRC | **0.7942** | Area under precision-recall curve on hold-out set |
-| Recall | **0.7600** | Fraction of fraudulent transactions correctly caught |
-| FPR | **0.000141** | False positive rate — legitimate transactions incorrectly flagged |
-| Threshold | 0.5 | Tuned to maximise recall subject to FPR ≤ 0.01 |
+| Metric    | Value        | Notes                                                             |
+| --------- | ------------ | ----------------------------------------------------------------- |
+| AUPRC     | **0.7942**   | Area under precision-recall curve on hold-out set                 |
+| Recall    | **0.7600**   | Fraction of fraudulent transactions correctly caught              |
+| FPR       | **0.000141** | False positive rate — legitimate transactions incorrectly flagged |
+| Threshold | 0.5          | Tuned to maximise recall subject to FPR ≤ 0.01                    |
 
 **Dataset:** Kaggle Credit Card Fraud Detection — 284,807 transactions, 492 frauds (0.17%), two days of European card activity, September 2013. Split chronologically: first 80% for training, last 20% for evaluation. V1–V28 are PCA-transformed card-network features; the original feature identities are withheld by the dataset provider.
 
 **Known limitations:**
+
 - Two days of data — model has not seen seasonal fraud patterns or attacks that post-date September 2013.
 - V1–V28 cannot be interpreted directly; SHAP values explain the PCA components, not the original transaction attributes.
 - FPR measured on the test set; expect higher FPR in production as the transaction distribution drifts.
@@ -127,12 +134,12 @@ CloudWatch ← PSI metrics (FraudDetection/FraudPSI, per feature)
 
 Four segments are tested on every CD run:
 
-| Segment | Definition | Gate condition |
-|---------|------------|----------------|
-| `high_amount` | Amount > $1,000 | AUPRC < 70% of overall, or FPR > 2× overall |
-| `low_amount` | Amount ≤ $1,000 | same |
-| `high_hour` | hour_of_day ≥ 18 (evening) | same |
-| `low_hour` | hour_of_day < 18 (daytime) | same |
+| Segment       | Definition                 | Gate condition                              |
+| ------------- | -------------------------- | ------------------------------------------- |
+| `high_amount` | Amount > $1,000            | AUPRC < 70% of overall, or FPR > 2× overall |
+| `low_amount`  | Amount ≤ $1,000            | same                                        |
+| `high_hour`   | hour_of_day ≥ 18 (evening) | same                                        |
+| `low_hour`    | hour_of_day < 18 (daytime) | same                                        |
 
 A segment failure blocks deployment (`run_bias_test.py` exits 1).
 
@@ -148,12 +155,14 @@ A segment failure blocks deployment (`run_bias_test.py` exits 1).
 
 ### CD — runs on merge to `main`
 
-1. `docker build` with `GIT_SHA` build arg → push to ECR
-2. Lambda function update (zero-downtime alias swap)
-3. Smoke test: `GET /health` must return `model_loaded: true`
+1. `docker build` with `GIT_SHA` build arg → push to ECR (tagged `{sha}` + `latest`)
+2. Staging Lambda update (`update-function-code`)
+3. Staging smoke test: `GET /health` must return `model_loaded: true` + `POST /predict` must return valid response
 4. Bias gate: `PYTHONPATH=. python scripts/run_bias_test.py` — exits 1 and blocks if any segment is flagged
-5. `python scripts/generate_model_card.py` — regenerates `model_card.json` with current bias results
+5. `python scripts/generate_model_card.py` — regenerates `model_card.json` → uploads to S3
 6. PSI baseline verified: `python scripts/compute_baseline.py`
+7. Production Lambda update — only runs if all prior steps pass
+8. Production smoke test: `GET /health` must return 200
 
 **Drift monitoring:** `GET /drift` computes PSI across the last 500 predictions against the training baseline. CloudWatch receives one `FraudPSI` metric per feature per call. PSI thresholds: < 0.10 stable, 0.10–0.20 monitor, ≥ 0.20 action required.
 
@@ -177,26 +186,26 @@ A segment failure blocks deployment (`run_bias_test.py` exits 1).
 
 ## EU AI Act compliance
 
-| Article | Requirement | Implementation |
-|---------|-------------|----------------|
-| Art. 9 — Risk management | Systematic testing before deployment | Bias gate in CD pipeline; `run_bias_test.py` exits 1 on failure |
-| Art. 10 — Data governance | Fairness across relevant population segments | FPR parity tested across Amount and time-of-day segments |
-| Art. 11 — Technical documentation | Documented model characteristics and performance | Auto-generated `model_card.json` on every deployment |
-| Art. 12 — Record keeping | Audit trail for all automated decisions | DynamoDB `fraud-audit-log` — permanent, append-only, UUID-keyed |
-| Art. 13 — Transparency | Explainable outputs | SHAP architecture implemented; per-prediction attribution stored in audit log |
-| Art. 14 — Human oversight | Humans can review and override | Override queue (`fraud-override-queue`) + confidence gating for uncertain predictions |
-| Art. 15 — Accuracy and robustness | Monitoring for performance degradation | PSI drift monitoring with CloudWatch metrics; rule-based fallback via threshold adjustment |
+| Article                           | Requirement                                      | Implementation                                                                             |
+| --------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| Art. 9 — Risk management          | Systematic testing before deployment             | Bias gate in CD pipeline; `run_bias_test.py` exits 1 on failure                            |
+| Art. 10 — Data governance         | Fairness across relevant population segments     | FPR parity tested across Amount and time-of-day segments                                   |
+| Art. 11 — Technical documentation | Documented model characteristics and performance | Auto-generated `model_card.json` on every deployment                                       |
+| Art. 12 — Record keeping          | Audit trail for all automated decisions          | DynamoDB `fraud-audit-log` — permanent, append-only, UUID-keyed                            |
+| Art. 13 — Transparency            | Explainable outputs                              | SHAP architecture implemented; per-prediction attribution stored in audit log              |
+| Art. 14 — Human oversight         | Humans can review and override                   | Override queue (`fraud-override-queue`) + confidence gating for uncertain predictions      |
+| Art. 15 — Accuracy and robustness | Monitoring for performance degradation           | PSI drift monitoring with CloudWatch metrics; rule-based fallback via threshold adjustment |
 
 ---
 
 ## Dataset citation
 
 Andrea Dal Pozzolo, Olivier Caelen, Reid A. Johnson, and Gianluca Bontempi.  
-*Calibrating Probability with Undersampling for Unbalanced Classification.*  
+_Calibrating Probability with Undersampling for Unbalanced Classification._  
 In Proceedings of the IEEE Symposium Series on Computational Intelligence (SSCI), 2015.
 
 Yann-Aël Le Borgne and Gianluca Bontempi.  
-*Reproducible Machine Learning for Credit Card Fraud Detection — Practical Handbook.*  
+_Reproducible Machine Learning for Credit Card Fraud Detection — Practical Handbook._  
 Université Libre de Bruxelles, 2022.
 
 Dataset hosted by the Machine Learning Group, Université Libre de Bruxelles (ULB), in collaboration with Worldline.  
@@ -232,14 +241,14 @@ make docker-run    # run locally on port 9000
 
 # Integration and load tests
 make test-integration
-# locust -f tests/load/locustfile.py --host=https://{api-id}.execute-api...
+# locust -f tests/load/locustfile.py --host=https://4mhpswg272.execute-api.eu-central-1.amazonaws.com
 ```
 
 **Environment variables**
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `MODEL_PATH` | `models/xgboost_fraud_v1.pkl` | Path to model bundle |
-| `MODEL_VERSION` | `xgboost_fraud_v1` | Version label logged with each prediction |
-| `AUDIT_TABLE` | `fraud-audit-log` | DynamoDB table for prediction audit records |
-| `AWS_DEFAULT_REGION` | `eu-central-1` | AWS region for DynamoDB and CloudWatch |
+| Variable             | Default                       | Description                                 |
+| -------------------- | ----------------------------- | ------------------------------------------- |
+| `MODEL_PATH`         | `models/xgboost_fraud_v1.pkl` | Path to model bundle                        |
+| `MODEL_VERSION`      | `xgboost_fraud_v1`            | Version label logged with each prediction   |
+| `AUDIT_TABLE`        | `fraud-audit-log`             | DynamoDB table for prediction audit records |
+| `AWS_DEFAULT_REGION` | `eu-central-1`                | AWS region for DynamoDB and CloudWatch      |
