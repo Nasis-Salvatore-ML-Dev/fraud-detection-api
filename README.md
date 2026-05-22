@@ -115,12 +115,12 @@ CloudWatch ← PSI metrics (FraudDetection/FraudPSI, per feature)
 
 ## Model
 
-| Metric    | Value        | Notes                                                             |
-| --------- | ------------ | ----------------------------------------------------------------- |
-| AUPRC     | **0.7942**   | Area under precision-recall curve on hold-out set                 |
-| Recall    | **0.7600**   | Fraction of fraudulent transactions correctly caught              |
-| FPR       | **0.000141** | False positive rate — legitimate transactions incorrectly flagged |
-| Threshold | 0.5          | Tuned to maximise recall subject to FPR ≤ 0.01                    |
+| Metric    | Value        | Notes                                                                                                               |
+| --------- | ------------ | ------------------------------------------------------------------------------------------------------------------- |
+| AUPRC     | **0.7942**   | Area under precision-recall curve on hold-out set                                                                   |
+| Recall    | **0.7600**   | Fraction of fraudulent transactions correctly caught                                                                |
+| FPR       | **0.000141** | False positive rate — legitimate transactions incorrectly flagged                                                   |
+| Threshold | 0.5          | Default threshold; recall and FPR measured at this value. Optuna tuning in progress to push AUPRC toward 0.85–0.90. |
 
 **Dataset:** Kaggle Credit Card Fraud Detection — 284,807 transactions, 492 frauds (0.17%), two days of European card activity, September 2013. Split chronologically: first 80% for training, last 20% for evaluation. V1–V28 are PCA-transformed card-network features; the original feature identities are withheld by the dataset provider.
 
